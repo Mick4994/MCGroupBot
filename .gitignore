@@ -161,4 +161,4 @@ cython_debug/
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/vcs.xml
 /.idea/wxauto.iml
-key.txt
+/key.txt
