@@ -31,7 +31,13 @@ except:
 if not key:
     print('请在key.txt文件中输入正确的中转apikey')
 
-def checkMCServer():
+
+def checkMCServer() -> str:
+    """
+    获取服务器状态
+
+    :return sendmsg获取的结果格式化文本
+    """
     sendmsg = '检测到服务器：'
     for host, port in servers.items():
         server = JavaServer.lookup(private_ip+':'+str(port))
@@ -65,7 +71,12 @@ def checkMCServer():
     return sendmsg[:-1]
 
 
-def getLiveStatus():
+def getLiveStatus() -> str:
+    """
+    获取直播间状态的接口
+
+    :return status 有四种状态['未知'，'未开播'，'直播中'，'轮播中']
+    """
     response = requests.request("GET",
         url="https://api.live.bilibili.com/room/v1/Room/room_init?id=31149017",
         headers={
@@ -89,7 +100,37 @@ def getLiveStatus():
     return status
 
 
-def getGTP(history_context:List, new_message:str):
+def getDailyNews() -> tuple[str, str]:
+    """
+    获取东南大学Minecraft社的【每日冷知识】动态
+    """
+    newsUrl = "https://api.vc.bilibili.com/dynamic_svr/v1/dynamic_svr/space_history?host_uid=1377901474"
+    res = requests.get(newsUrl)
+
+    # 解析需要的字段
+    context = res.json()['data']['cards'][0]['card']
+    context_dict = json.loads(context)
+    newsMsg = context_dict['item']['description']
+    img_url = context_dict['item']['pictures'][0]['img_src']
+
+    # 存图片
+    filename = time.strftime('%Y_%m_%d', time.localtime(time.time()))
+    filename = 'C:/ImgData/' + filename + '.png'
+    imgRes = requests.get(img_url)
+    with open(filename, 'wb') as f:
+        f.write(imgRes.content)
+
+    return newsMsg, filename
+
+
+def getGPT(history_context:List, new_message:str) -> List:
+    """
+    封装gptapi，可以发送文本提问，返回文本回答
+
+    :params histort_context 上次历史消息记录
+    :params new_message 提问的消息
+    :return history_context 合并后的历史消息记录
+    """
 
     with open('text/system_prompt.txt', mode='r', encoding='utf-8') as f:
         sys_context = f.read()
@@ -176,6 +217,14 @@ if __name__ == "__main__":
                     sendmsg += '检测到官号开播：\n深圳技术大学Minecraft社直播间\n直播间地址：https://live.bilibili.com/31149017'
                     last_status = status
 
+            # 每日冷知识
+            if hour == '15' and min == '45' and (sec == '00' or sec == '01'):
+                newMsg, filename = getDailyNews()
+                newMsg += '\n--转自东南大学Minecraft社B站动态'
+                newMsg += help_msg
+                wx.SendMsg(newMsg, who)
+                wx.SendFiles(filename, who)
+
             if not context:
                 continue
 
@@ -206,9 +255,9 @@ if __name__ == "__main__":
                 asker = last_msg[0]
                 wx.SendMsg('正在思考中，回复完成前不会有响应', who)
                 new_msg = f'玩家{asker}说:'+context[5:] + '\n回复简短，限制在100字以内，用文言文回复'
-                history_context = getGTP(history_context, new_msg)
+                history_context = getGPT(history_context, new_msg)
                 answer = history_context[-1]["content"]
-                sendmsg += f'@{asker} {answer}'
+                sendmsg += f'@{asker}{context[4]}{answer}'
 
             # 发送查询结果
             if sendmsg:
