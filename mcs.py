@@ -10,6 +10,28 @@ from getMCServer import search_minecraft_server
 from traceback import print_exc
 from io import StringIO
 from mcstatus import JavaServer
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chains import RetrievalQA
+from langchain.chat_models import ChatOpenAI
+from langchain.vectorstores import Chroma
+
+# api接口url和key设置
+with open('key.txt', 'r') as f:
+    os.environ["OPENAI_API_KEY"] = f.read()
+os.environ["OPENAI_API_BASE"] = 'https://api.nextapi.fun/openai/v1'
+
+# 加载LLM
+chat = ChatOpenAI(temperature=0)
+
+# 初始化 openai 的 embeddings 对象
+embeddings = OpenAIEmbeddings()
+
+docsearch = Chroma(embedding_function=embeddings, persist_directory='mcdb')
+
+# 创建问答对象
+qa = RetrievalQA.from_chain_type(
+    llm=chat, chain_type="stuff", retriever=docsearch.as_retriever(), return_source_documents=True
+)
 
 # 参数
 servers = {
@@ -166,7 +188,7 @@ def getGPT(history_context:List, new_message:str) -> List:
         }, data=payload)
     ans = response.json()["choices"][0]["message"]
     history_context = messages + [ans]
-    with open('text/historyGPT.txt', 'a') as f:
+    with open(file='text/historyGPT.txt', mode='a', encoding='utf-8') as f:
         f.write(str(history_context)+'\n')
     return history_context
 
@@ -218,7 +240,7 @@ if __name__ == "__main__":
                     last_status = status
 
             # 每日冷知识
-            if hour == '15' and min == '45' and (sec == '00' or sec == '01'):
+            if hour == '15' and min == '45' and (sec == '00' or sec == '01') or context == '/news':
                 newMsg, filename = getDailyNews()
                 newMsg += '\n--转自东南大学Minecraft社B站动态'
                 newMsg += help_msg
@@ -238,6 +260,15 @@ if __name__ == "__main__":
                     status = getLiveStatus()
                     sendmsg += f'深圳技术大学Minecraft社直播间：\n直播状态：{status}\n直播间地址：https://live.bilibili.com/31149017'
                     last_status = status
+
+                # 本地知识库
+                elif context[:6] == '/agent':
+                    wx.SendMsg('正在查询与整理中，回复完成前不会有响应', who)
+                    result = qa({"query": context[7:]})
+                    localMsg = result['result'] + '\n'
+                    for index, source in enumerate(result['source_documents']):
+                        localMsg += (f'\n来源{index + 1}:' + source.dict()['metadata']['source'])
+                    wx.SendMsg(localMsg, who)
 
                 else:
                     try:

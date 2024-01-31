@@ -163,3 +163,4 @@ cython_debug/
 /.idea/wxauto.iml
 /key.txt
 /text/historyGPT.txt
+/mcdb/
